@@ -1,4 +1,7 @@
-from app.ocr.mock_provider import MockOCRProvider
+import pytest
+
+from tests.mock_provider import MockOCRProvider
+from app.ocr.base import BBox
 from app.schemas.grading import Rubric, RubricPoint
 from app.segmentation import match_segments, segment_script
 from app.segmentation.segmenter import detect_question_label

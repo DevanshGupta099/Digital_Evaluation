@@ -17,7 +17,7 @@ class RubricPoint(BaseModel):
 
     id: str
     description: str
-    max_marks: float = Field(gt=0)
+    max_marks: float
     acceptable_variations: list[str] = Field(default_factory=list)
 
 
@@ -41,26 +41,20 @@ class PointStatus(str, Enum):
 class PointEvaluation(BaseModel):
     rubric_point_id: str
     status: PointStatus
-    marks_awarded: float = Field(ge=0)
+    marks_awarded: float
     # Global OCR line indices (OCRResult.numbered_lines) grounding this decision.
     evidence_line_indices: list[int] = Field(default_factory=list)
     evidence_quote: str = ""
-    confidence: float = Field(ge=0, le=1)
+    confidence: float
     reasoning: str = ""
 
-    @model_validator(mode="after")
-    def _marks_require_evidence(self) -> "PointEvaluation":
-        if self.marks_awarded > 0 and not self.evidence_line_indices:
-            raise ValueError(
-                f"Rubric point {self.rubric_point_id}: marks awarded without cited evidence lines"
-            )
-        return self
+
 
 
 class QuestionEvaluation(BaseModel):
     question_number: str
     point_evaluations: list[PointEvaluation]
-    overall_confidence: float = Field(ge=0, le=1)
+    overall_confidence: float
     examiner_note: str = ""
 
     @property

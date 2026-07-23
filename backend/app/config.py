@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -10,7 +11,7 @@ class Settings(BaseSettings):
     storage_dir: str = "./storage"
 
     # OCR provider: "azure" | "google" | "mock"
-    ocr_provider: str = "mock"
+    ocr_provider: str = Field(default="gemini")
     azure_docint_endpoint: str = ""
     azure_docint_key: str = ""
     google_application_credentials: str = ""
@@ -20,9 +21,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-pro"
 
-    # Pass 2 (independent cross-check): xAI Grok
-    grok_api_key: str = ""
-    grok_model: str = "grok-3-mini"
+    # Pass 2 (independent cross-check): Groq
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.1-8b-instant"
 
     # Shared grading parameters
     grading_temperature: float = 0.0

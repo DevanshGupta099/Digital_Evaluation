@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from app.grading.engine import GradingEngine
 from app.models.db import Base
 from app.models.entities import EvaluationRecord, QuestionBankEntry, Report, Script
-from app.ocr.mock_provider import MockOCRProvider
+from tests.mock_provider import MockOCRProvider
 from app.pipeline import process_script
 
 SCRIPT_TEXT = (

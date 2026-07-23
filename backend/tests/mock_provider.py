@@ -6,7 +6,7 @@ without cloud credentials.
 """
 from __future__ import annotations
 
-from .base import BBox, OCRLine, OCRPage, OCRProvider, OCRResult, OCRWord
+from app.ocr.base import BBox, OCRLine, OCRPage, OCRProvider, OCRResult, OCRWord
 
 
 class MockOCRProvider(OCRProvider):

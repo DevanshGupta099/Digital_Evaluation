@@ -2,7 +2,7 @@
 
 Two *independent* LLMs perform the two evaluation passes:
   • Pass 1 (primary)  — Google Gemini  (GEMINI_API_KEY / GEMINI_MODEL)
-  • Pass 2 (cross-check) — xAI Grok     (GROK_API_KEY   / GROK_MODEL)
+  • Pass 2 (cross-check) — Groq         (GROQ_API_KEY   / GROQ_MODEL)
 
 Per question: each model grades independently at temperature 0 against the
 structured schema (marks require cited evidence), then results are merged.
@@ -50,10 +50,10 @@ class _GeminiAdapter:
         return response.text
 
 
-class _GrokAdapter:
-    """Thin wrapper around xAI's OpenAI-compatible REST API."""
+class _GroqAdapter:
+    """Thin wrapper around Groq's OpenAI-compatible REST API."""
 
-    _BASE_URL = "https://api.x.ai/v1"
+    _BASE_URL = "https://api.groq.com/openai/v1"
 
     def __init__(self, api_key: str, model: str, temperature: float) -> None:
         from openai import OpenAI  # type: ignore[import]
@@ -78,7 +78,7 @@ class _GrokAdapter:
 # ---------------------------------------------------------------------------
 
 class GradingEngine:
-    """Orchestrates dual-pass grading: Gemini (pass 1) then Grok (pass 2)."""
+    """Orchestrates dual-pass grading: Gemini (pass 1) then Groq (pass 2)."""
 
     def __init__(
         self,
@@ -91,9 +91,9 @@ class GradingEngine:
             model=settings.gemini_model,
             temperature=settings.grading_temperature,
         )
-        self._secondary = secondary_adapter or _GrokAdapter(
-            api_key=settings.grok_api_key,
-            model=settings.grok_model,
+        self._secondary = secondary_adapter or _GroqAdapter(
+            api_key=settings.groq_api_key,
+            model=settings.groq_model,
             temperature=settings.grading_temperature,
         )
 
@@ -110,7 +110,7 @@ class GradingEngine:
 
         adapters = [
             ("Gemini (pass 1)", self._primary),
-            ("Grok (pass 2)",   self._secondary),
+            ("Groq (pass 2)",   self._secondary),
         ]
 
         for label, adapter in adapters[: max(1, settings.grading_passes)]:
@@ -162,7 +162,7 @@ class GradingEngine:
                 flags.append(ReviewFlag(
                     question_number=rubric.question_number,
                     reason=(
-                        f"Dual-model disagreement (Gemini vs Grok): "
+                        f"Dual-model disagreement (Gemini vs Groq): "
                         f"{primary.marks_awarded:g} vs "
                         f"{second.marks_awarded:g} out of {rubric.total_marks:g}"
                     ),

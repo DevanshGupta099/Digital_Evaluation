@@ -14,8 +14,13 @@ def get_ocr_provider(name: str | None = None) -> OCRProvider:
         from .google_provider import GoogleVisionOCRProvider
 
         return GoogleVisionOCRProvider()
+    if name == "gemini":
+        from .gemini_provider import GeminiOCRProvider
+        return GeminiOCRProvider()
     if name == "mock":
-        from .mock_provider import MockOCRProvider
-
-        return MockOCRProvider()
+        try:
+            from tests.mock_provider import MockOCRProvider
+            return MockOCRProvider()
+        except ImportError:
+            pass
     raise ValueError(f"Unknown OCR provider: {name}")

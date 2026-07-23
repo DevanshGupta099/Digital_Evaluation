@@ -20,3 +20,10 @@ export function submitReview(evaluationId, decision) {
     body: JSON.stringify(decision),
   }).then(json)
 }
+
+export function analyzeMaterials(questionPaperFile, answerKeyFile) {
+  const form = new FormData()
+  form.append('question_paper', questionPaperFile)
+  form.append('answer_key', answerKeyFile)
+  return fetch('/api/analyze/materials', { method: 'POST', body: form }).then(json)
+}

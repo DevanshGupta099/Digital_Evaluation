@@ -34,7 +34,7 @@ def test_zero_marks_without_evidence_allowed():
 # ---------------------------------------------------------------------------
 
 class _FakeAdapter:
-    """Simulates a Gemini or Grok adapter for unit tests."""
+    """Simulates a Gemini or Groq adapter for unit tests."""
 
     def __init__(self, payloads):
         self._payloads = list(payloads)
