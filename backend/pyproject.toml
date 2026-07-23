@@ -2,7 +2,7 @@
 name = "ai-answer-script-grader"
 version = "0.1.0"
 description = "AI-assisted handwritten answer script grading: OCR, rubric evaluation, PDF annotation, human review"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.111,<1.0",
     "uvicorn[standard]>=0.30,<1.0",
