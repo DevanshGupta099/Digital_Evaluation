@@ -15,8 +15,16 @@ class Settings(BaseSettings):
     azure_docint_key: str = ""
     google_application_credentials: str = ""
 
-    anthropic_api_key: str = ""
-    grading_model: str = "claude-sonnet-4-20250514"
+    # --- Stage 4: Dual-pass grading LLMs ---
+    # Pass 1 (primary): Google Gemini
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-pro"
+
+    # Pass 2 (independent cross-check): xAI Grok
+    grok_api_key: str = ""
+    grok_model: str = "grok-3-mini"
+
+    # Shared grading parameters
     grading_temperature: float = 0.0
     grading_passes: int = 2
     # Marks disagreement (fraction of question total) above which a question is flagged.

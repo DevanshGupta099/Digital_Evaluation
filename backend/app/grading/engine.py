@@ -1,7 +1,11 @@
-"""Stage 4: rubric-based evaluation engine.
+"""Stage 4: rubric-based evaluation engine — dual-model cross-check.
 
-Per question: two independent low-temperature evaluation passes, validated
-against the structured schema (marks require cited evidence), then merged.
+Two *independent* LLMs perform the two evaluation passes:
+  • Pass 1 (primary)  — Google Gemini  (GEMINI_API_KEY / GEMINI_MODEL)
+  • Pass 2 (cross-check) — xAI Grok     (GROK_API_KEY   / GROK_MODEL)
+
+Per question: each model grades independently at temperature 0 against the
+structured schema (marks require cited evidence), then results are merged.
 Disagreement above threshold, low confidence, low OCR legibility, or schema
 violations all produce explicit review flags — nothing is silently averaged
 or silently dropped.
@@ -22,13 +26,76 @@ class EvaluationError(Exception):
     pass
 
 
-class GradingEngine:
-    def __init__(self, client=None) -> None:
-        if client is None:
-            import anthropic
+# ---------------------------------------------------------------------------
+# Provider adapters — each exposes a single .complete(system, user) -> str
+# ---------------------------------------------------------------------------
 
-            client = anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
-        self._client = client
+class _GeminiAdapter:
+    """Thin wrapper around the google-genai SDK."""
+
+    def __init__(self, api_key: str, model: str, temperature: float) -> None:
+        import google.generativeai as genai  # type: ignore[import]
+        genai.configure(api_key=api_key)
+        self._model = genai.GenerativeModel(
+            model_name=model,
+            system_instruction=SYSTEM_PROMPT,
+            generation_config=genai.GenerationConfig(
+                temperature=temperature,
+                response_mime_type="application/json",
+            ),
+        )
+
+    def complete(self, user_prompt: str) -> str:
+        response = self._model.generate_content(user_prompt)
+        return response.text
+
+
+class _GrokAdapter:
+    """Thin wrapper around xAI's OpenAI-compatible REST API."""
+
+    _BASE_URL = "https://api.x.ai/v1"
+
+    def __init__(self, api_key: str, model: str, temperature: float) -> None:
+        from openai import OpenAI  # type: ignore[import]
+        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL)
+        self._model = model
+        self._temperature = temperature
+
+    def complete(self, user_prompt: str) -> str:
+        response = self._client.chat.completions.create(
+            model=self._model,
+            temperature=self._temperature,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": user_prompt},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
+
+# ---------------------------------------------------------------------------
+# Grading engine
+# ---------------------------------------------------------------------------
+
+class GradingEngine:
+    """Orchestrates dual-pass grading: Gemini (pass 1) then Grok (pass 2)."""
+
+    def __init__(
+        self,
+        primary_adapter=None,
+        secondary_adapter=None,
+    ) -> None:
+        # Allow injection (e.g. for tests); fall back to live clients.
+        self._primary = primary_adapter or _GeminiAdapter(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+            temperature=settings.grading_temperature,
+        )
+        self._secondary = secondary_adapter or _GrokAdapter(
+            api_key=settings.grok_api_key,
+            model=settings.grok_model,
+            temperature=settings.grading_temperature,
+        )
 
     def grade_question(
         self,
@@ -41,15 +108,23 @@ class GradingEngine:
         passes: list[QuestionEvaluation] = []
         errors: list[str] = []
 
-        for pass_no in range(max(1, settings.grading_passes)):
+        adapters = [
+            ("Gemini (pass 1)", self._primary),
+            ("Grok (pass 2)",   self._secondary),
+        ]
+
+        for label, adapter in adapters[: max(1, settings.grading_passes)]:
             try:
                 passes.append(
-                    self._run_pass(rubric, numbered_answer_lines, calibration_examples)
+                    self._run_pass(rubric, numbered_answer_lines,
+                                   calibration_examples, adapter)
                 )
             except EvaluationError as exc:
-                logger.warning("Evaluation pass %d failed for Q%s: %s",
-                               pass_no + 1, rubric.question_number, exc)
-                errors.append(str(exc))
+                logger.warning(
+                    "Evaluation %s failed for Q%s: %s",
+                    label, rubric.question_number, exc,
+                )
+                errors.append(f"{label}: {exc}")
 
         if not passes:
             zero = QuestionEvaluation(
@@ -70,7 +145,7 @@ class GradingEngine:
             )
 
         primary = passes[0]
-        second = passes[1] if len(passes) > 1 else None
+        second  = passes[1] if len(passes) > 1 else None
 
         if errors:
             flags.append(ReviewFlag(
@@ -78,24 +153,32 @@ class GradingEngine:
                 reason=f"An evaluation pass failed: {'; '.join(errors)}",
             ))
 
+        # Cross-check: flag when the two models disagree significantly.
         if second is not None and rubric.total_marks > 0:
-            disagreement = abs(primary.marks_awarded - second.marks_awarded) / rubric.total_marks
+            disagreement = (
+                abs(primary.marks_awarded - second.marks_awarded) / rubric.total_marks
+            )
             if disagreement > settings.disagreement_threshold:
                 flags.append(ReviewFlag(
                     question_number=rubric.question_number,
                     reason=(
-                        f"Dual-pass disagreement: {primary.marks_awarded:g} vs "
+                        f"Dual-model disagreement (Gemini vs Grok): "
+                        f"{primary.marks_awarded:g} vs "
                         f"{second.marks_awarded:g} out of {rubric.total_marks:g}"
                     ),
                 ))
 
-        min_conf = min([primary.overall_confidence]
-                       + ([second.overall_confidence] if second else []))
+        min_conf = min(
+            [primary.overall_confidence]
+            + ([second.overall_confidence] if second else [])
+        )
         if min_conf < settings.confidence_threshold:
             flags.append(ReviewFlag(
                 question_number=rubric.question_number,
-                reason=f"Evaluation confidence {min_conf:.2f} below threshold "
-                       f"{settings.confidence_threshold:.2f}",
+                reason=(
+                    f"Evaluation confidence {min_conf:.2f} below threshold "
+                    f"{settings.confidence_threshold:.2f}"
+                ),
             ))
 
         if line_confidences:
@@ -136,18 +219,12 @@ class GradingEngine:
         rubric: Rubric,
         numbered_answer_lines: list[tuple[int, str]],
         calibration_examples: list[dict] | None,
+        adapter,
     ) -> QuestionEvaluation:
         prompt = build_user_prompt(rubric, numbered_answer_lines, calibration_examples)
         try:
-            response = self._client.messages.create(
-                model=settings.grading_model,
-                max_tokens=4096,
-                temperature=settings.grading_temperature,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw = "".join(block.text for block in response.content if block.type == "text")
-        except Exception as exc:  # network / API errors
+            raw = adapter.complete(prompt)
+        except Exception as exc:
             raise EvaluationError(f"LLM call failed: {exc}") from exc
 
         try:
@@ -163,7 +240,8 @@ class GradingEngine:
                 raise EvaluationError(f"Unknown rubric point id: {ev.rubric_point_id}")
             if ev.marks_awarded > cap:
                 raise EvaluationError(
-                    f"Rubric point {ev.rubric_point_id} awarded {ev.marks_awarded} > max {cap}"
+                    f"Rubric point {ev.rubric_point_id} awarded "
+                    f"{ev.marks_awarded} > max {cap}"
                 )
         return evaluation
 
@@ -173,5 +251,5 @@ def _strip_fences(text: str) -> str:
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text
         if text.endswith("```"):
-            text = text[: -3]
+            text = text[:-3]
     return text.strip()
