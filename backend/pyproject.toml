@@ -4,22 +4,22 @@ version = "0.1.0"
 description = "AI-assisted handwritten answer script grading: OCR, rubric evaluation, PDF annotation, human review"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.111",
-    "uvicorn[standard]>=0.30",
-    "pydantic>=2.7",
-    "pydantic-settings>=2.3",
-    "PyMuPDF>=1.24",
-    "sqlalchemy>=2.0",
-    "google-generativeai>=0.8",
-    "openai>=1.40",
-    "python-multipart>=0.0.9",
-    "httpx>=0.27",
+    "fastapi>=0.111,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.3,<3.0",
+    "PyMuPDF>=1.24,<2.0",
+    "sqlalchemy>=2.0,<3.0",
+    "google-generativeai>=0.8,<1.0",
+    "openai>=1.40,<2.0",
+    "python-multipart>=0.0.9,<1.0",
+    "httpx>=0.27,<1.0",
 ]
 
 [project.optional-dependencies]
-azure = ["azure-ai-documentintelligence>=1.0.0b3"]
-google = ["google-cloud-vision>=3.7"]
-dev = ["pytest>=8.0", "ruff>=0.5"]
+azure = ["azure-ai-documentintelligence>=1.0.0b3,<2.0"]
+google = ["google-cloud-vision>=3.7,<4.0"]
+dev = ["pytest>=8.0,<9.0", "ruff>=0.5,<1.0"]
 
 [tool.ruff]
 line-length = 100
