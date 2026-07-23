@@ -20,39 +20,29 @@ SCRIPT_TEXT = (
 )
 
 
-class _FakeBlock:
-    type = "text"
+class _FakeAdapter:
+    """Returns a valid grading JSON payload for any question, offline."""
 
-    def __init__(self, text):
-        self.text = text
-
-
-class _FakeClient:
-    def __init__(self):
-        class _Messages:
-            def create(inner, **kwargs):
-                prompt = kwargs["messages"][0]["content"]
-                # Determine which question is being graded from the prompt header.
-                qnum = prompt.split("## Question ", 1)[1].split("\n", 1)[0].strip()
-                # Cite the first numbered line that appears in the prompt.
-                answer_block = prompt.split("evidence)\n", 1)[1]
-                first_line = int(answer_block.split("[", 1)[1].split("]", 1)[0])
-                return type("R", (), {"content": [_FakeBlock(json.dumps({
-                    "question_number": qnum,
-                    "point_evaluations": [{
-                        "rubric_point_id": f"{qnum}a",
-                        "status": "present",
-                        "marks_awarded": 2.0,
-                        "evidence_line_indices": [first_line],
-                        "evidence_quote": "cited",
-                        "confidence": 0.92,
-                        "reasoning": "correct",
-                    }],
-                    "overall_confidence": 0.92,
-                    "examiner_note": "",
-                }))]})()
-
-        self.messages = _Messages()
+    def complete(self, user_prompt: str) -> str:
+        # Determine which question is being graded from the prompt header.
+        qnum = user_prompt.split("## Question ", 1)[1].split("\n", 1)[0].strip()
+        # Cite the first numbered line that appears in the prompt.
+        answer_block = user_prompt.split("evidence)\n", 1)[1]
+        first_line = int(answer_block.split("[", 1)[1].split("]", 1)[0])
+        return json.dumps({
+            "question_number": qnum,
+            "point_evaluations": [{
+                "rubric_point_id": f"{qnum}a",
+                "status": "present",
+                "marks_awarded": 2.0,
+                "evidence_line_indices": [first_line],
+                "evidence_quote": "cited",
+                "confidence": 0.92,
+                "reasoning": "correct",
+            }],
+            "overall_confidence": 0.92,
+            "examiner_note": "",
+        })
 
 
 @pytest.fixture
@@ -94,7 +84,7 @@ def test_full_pipeline(session, tmp_path):
     process_script(
         script.id, "exam1", session,
         ocr_provider=MockOCRProvider(page_texts=[SCRIPT_TEXT]),
-        engine=GradingEngine(client=_FakeClient()),
+        engine=GradingEngine(primary_adapter=_FakeAdapter(), secondary_adapter=_FakeAdapter()),
     )
 
     session.refresh(script)
