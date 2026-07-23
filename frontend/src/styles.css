@@ -1,0 +1,39 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; background: #f5f6f8; color: #1d2330; }
+header { background: #1d2b4f; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+header a { color: #cfd8ff; text-decoration: none; font-weight: 600; }
+main { padding: 20px 24px; }
+
+.card { background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef0f5; }
+tr:hover td { background: #f4f7ff; }
+
+.status { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.status.finalized, .status.annotated { background: #e0f4e4; color: #1d7a34; }
+.status.in_review { background: #fff2d9; color: #9a6a00; }
+.status.failed { background: #fde2e2; color: #b02323; }
+.status.uploaded, .status.ocr_done, .status.segmented, .status.graded { background: #e5ecff; color: #2a4bb3; }
+
+.review-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; height: calc(100vh - 120px); }
+.pdf-pane { border: 1px solid #e2e6ee; border-radius: 8px; overflow: hidden; background: #fff; }
+.pdf-pane iframe { width: 100%; height: 100%; border: 0; }
+.eval-pane { overflow-y: auto; }
+
+.question-card h3 { margin: 0 0 4px; }
+.marks { font-size: 20px; font-weight: 700; }
+.flag { background: #fff2d9; border-left: 4px solid #e2a400; padding: 6px 10px; margin: 6px 0; font-size: 13px; }
+.point { border-top: 1px dashed #e2e6ee; padding: 8px 0; font-size: 14px; }
+.point .quote { background: #f2f6ff; border-left: 3px solid #6b8cff; padding: 4px 8px; margin: 4px 0; font-style: italic; }
+.point .present { color: #1d7a34; font-weight: 700; }
+.point .partial { color: #9a6a00; font-weight: 700; }
+.point .absent { color: #b02323; font-weight: 700; }
+
+.actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+button { border: 0; border-radius: 6px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+button.accept { background: #1d7a34; color: #fff; }
+button.override { background: #b02323; color: #fff; }
+button:disabled { opacity: 0.5; cursor: default; }
+input[type="number"] { width: 80px; padding: 6px; border: 1px solid #ccd2de; border-radius: 6px; }
+input[type="text"] { padding: 6px; border: 1px solid #ccd2de; border-radius: 6px; }
+.reviewed { color: #1d7a34; font-weight: 600; }
