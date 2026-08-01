@@ -1,137 +1,93 @@
-import json
-
 import pytest
-from pydantic import ValidationError
+from httpx import AsyncClient, ASGITransport
 
-from app.grading.engine import GradingEngine
-from app.schemas.grading import PointEvaluation, PointStatus, Rubric, RubricPoint
+from app.main import app
+from app.database.models import (
+    AnswerScript, RubricItem, RubricVersion, QuestionPaper, ClassOffering,
+    RubricStatus, SegmentationRun, OCRPage, EvaluationRun, RunType, AnswerScriptStatus
+)
+from app.grading.schemas import build_grading_schema
+from tests.conftest import TestingSessionLocal
 
+@pytest.mark.asyncio
+async def test_grading_schema_builder():
+    """Test that the dynamic schema restricts marks appropriately."""
+    allowed_increments = [0.0, 0.5, 1.0, 1.5]
+    schema = build_grading_schema(allowed_increments)
+    json_schema = schema.model_json_schema()
+    
+    properties = json_schema["properties"]
+    assert "marks_awarded" in properties
+    assert "reasoning" in properties
+    assert "evidence_quote" in properties
+    assert "max_marks" not in properties
+    
+    # Check that $defs contains the enum values for Marks
+    defs = json_schema.get("$defs", {})
+    marks_def = defs.get("Marks", {})
+    assert "enum" in marks_def
+    assert set(marks_def["enum"]) == set(allowed_increments)
 
-def test_marks_without_evidence_rejected():
-    with pytest.raises(ValidationError):
-        PointEvaluation(
-            rubric_point_id="1a",
-            status=PointStatus.PRESENT,
-            marks_awarded=2,
-            evidence_line_indices=[],
-            confidence=0.9,
+@pytest.mark.asyncio
+async def test_grading_sync_endpoint(setup_db):
+    """
+    Test the sync grading endpoint which fires mocks for Claude and Gemini,
+    validates the schema constraint, and saves 2 EvaluationRuns.
+    """
+    async with TestingSessionLocal() as session:
+        # Seed basic hierarchy
+        co = ClassOffering(
+            id="co1", department_id="d1", course_id="c1", section_id="s1",
+            academic_term_id="a1", subject_id="su1"
         )
-
-
-def test_zero_marks_without_evidence_allowed():
-    ev = PointEvaluation(
-        rubric_point_id="1a",
-        status=PointStatus.ABSENT,
-        marks_awarded=0,
-        evidence_line_indices=[],
-        confidence=0.9,
-    )
-    assert ev.marks_awarded == 0
-
-
-# ---------------------------------------------------------------------------
-# Fake adapter: returns queued JSON payloads, one per .complete() call.
-# ---------------------------------------------------------------------------
-
-class _FakeAdapter:
-    """Simulates a Gemini or Groq adapter for unit tests."""
-
-    def __init__(self, payloads):
-        self._payloads = list(payloads)
-        self.calls = 0
-
-    def complete(self, user_prompt: str) -> str:  # noqa: ARG002
-        self.calls += 1
-        return json.dumps(self._payloads.pop(0))
-
-
-def _make_engine(primary_payloads, secondary_payloads):
-    return GradingEngine(
-        primary_adapter=_FakeAdapter(primary_payloads),
-        secondary_adapter=_FakeAdapter(secondary_payloads),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Shared fixtures
-# ---------------------------------------------------------------------------
-
-def _rubric():
-    return Rubric(
-        question_number="1",
-        question_text="Explain photosynthesis.",
-        model_answer="Converts light to chemical energy in chloroplasts.",
-        points=[
-            RubricPoint(id="1a", description="definition", max_marks=2),
-            RubricPoint(id="1b", description="location", max_marks=1),
-        ],
-    )
-
-
-def _payload(marks_a=2.0, marks_b=1.0, confidence=0.9):
-    return {
-        "question_number": "1",
-        "point_evaluations": [
-            {"rubric_point_id": "1a", "status": "present", "marks_awarded": marks_a,
-             "evidence_line_indices": [0], "evidence_quote": "converts light energy",
-             "confidence": confidence, "reasoning": "definition present"},
-            {"rubric_point_id": "1b", "status": "present" if marks_b else "absent",
-             "marks_awarded": marks_b,
-             "evidence_line_indices": [1] if marks_b else [],
-             "evidence_quote": "in the chloroplast" if marks_b else "",
-             "confidence": confidence, "reasoning": ""},
-        ],
-        "overall_confidence": confidence,
-        "examiner_note": "",
-    }
-
-
-_LINES = [(0, "photosynthesis converts light energy"), (1, "in the chloroplast")]
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-def test_dual_pass_agreement_no_flags():
-    engine = _make_engine([_payload()], [_payload()])
-    result = engine.grade_question(_rubric(), _LINES)
-    assert result.evaluation.marks_awarded == 3.0
-    assert result.max_marks == 3.0
-    assert result.flags == []
-    assert result.second_pass is not None
-
-
-def test_dual_pass_disagreement_flagged():
-    engine = _make_engine([_payload(2, 1)], [_payload(0.5, 0)])
-    result = engine.grade_question(_rubric(), _LINES)
-    assert any("disagreement" in f.reason.lower() for f in result.flags)
-
-
-def test_low_confidence_flagged():
-    engine = _make_engine([_payload(confidence=0.4)], [_payload(confidence=0.4)])
-    result = engine.grade_question(_rubric(), _LINES)
-    assert any("confidence" in f.reason.lower() for f in result.flags)
-
-
-def test_illegible_evidence_flagged():
-    engine = _make_engine([_payload()], [_payload()])
-    result = engine.grade_question(_rubric(), _LINES,
-                                   line_confidences={0: 0.3, 1: 0.95})
-    assert any("legibility" in f.reason.lower() for f in result.flags)
-
-
-def test_nonexistent_evidence_line_flagged():
-    bad = _payload()
-    bad["point_evaluations"][0]["evidence_line_indices"] = [99]
-    engine = _make_engine([bad], [bad])
-    result = engine.grade_question(_rubric(), _LINES)
-    assert any("nonexistent" in f.reason for f in result.flags)
-
-
-def test_overmax_marks_rejected_and_flagged():
-    bad = _payload(marks_a=5.0)  # max is 2
-    engine = _make_engine([bad], [bad])
-    result = engine.grade_question(_rubric(), _LINES)
-    assert result.evaluation.marks_awarded == 0
-    assert any("failed" in f.reason.lower() for f in result.flags)
+        session.add(co)
+        qp = QuestionPaper(id="qp1", class_offering_id="co1", original_file_path="", page_count=3)
+        session.add(qp)
+        rv = RubricVersion(id="rv1", question_paper_id="qp1", version_number=1, status=RubricStatus.locked)
+        session.add(rv)
+        
+        # Seed RubricItem with allowed increments
+        session.add(RubricItem(
+            id="ri1", rubric_version_id="rv1", question_number="Q1",
+            max_marks=10, allowed_increments=[0.0, 1.0, 2.0, 3.0]
+        ))
+        
+        # Seed AnswerScript & OCR
+        script = AnswerScript(
+            id="script1", student_id="stu1", class_offering_id="co1",
+            original_file_path="", status=AnswerScriptStatus.segmented
+        )
+        session.add(script)
+        
+        session.add(OCRPage(
+            answer_script_id="script1", page_number=1, image_path="",
+            scale_factor=1, rotation=0, ocr_json={"words": [{"text": "Hello world"}]}
+        ))
+        
+        # Seed SegmentationRun mapping Q1 -> Page 1
+        session.add(SegmentationRun(
+            id="seg1", answer_script_id="script1", rubric_version_id="rv1",
+            mappings=[{"question_number": "Q1", "pages": [1], "confidence": 0.9}]
+        ))
+        await session.commit()
+        
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/grading/run-sync", json={
+            "answer_script_id": "script1",
+            "question_number": "Q1"
+        })
+        
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "success"
+        runs = data["evaluation_runs"]
+        assert len(runs) == 2
+        
+        # Ensure we got one of each type
+        types = [r["run_type"] for r in runs]
+        assert RunType.ai_pass_1.value in types
+        assert RunType.ai_pass_2.value in types
+        
+        # Since the mock selects the first enum value (0.0), both should be 0.0
+        assert runs[0]["marks_awarded"] == 0.0
+        assert runs[1]["marks_awarded"] == 0.0

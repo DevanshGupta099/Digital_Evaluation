@@ -1,0 +1,61 @@
+AI Answer Script Grader - Detailed Project Documentation
+======================================================
+
+1. Overview
+-----------
+This project is an advanced, automated Digital Evaluation System designed to grade handwritten exam answer scripts against a dynamically generated marking rubric. It annotates the student's script PDF with visual marks (ticks, crosses, badges) and routes any uncertain or conflicting AI grades to a human review dashboard. The system ensures the AI acts as an assistant and not the final unquestionable authority, integrating a full Role-Based Access Control (RBAC) model and an institutional hierarchy.
+
+2. Features Handled
+-------------------
+- Institutional Hierarchy: Support for scaling from Departments down to Courses, Sections, Semesters, Subjects, and specific Class Offerings.
+- Role-Based Access Control (RBAC): Differentiated permissions for Admins, Exam Coordinators, Faculty Evaluators, and Students.
+- Document Ingestion & Bulk Operations: Upload Question Papers, Answer Keys, and bulk student scripts or CSV rosters.
+- Dual-Pass AI Grading Pipeline: Utilizes Claude Sonnet 5 (Pass 1) and Gemini 3.5 Flash (Pass 2) concurrently to eliminate single-model bias, flagging disagreements for human review.
+- Dynamic Rubrics: AI-generated grading criteria that can be edited, locked, cloned across offerings, and updated with mid-flight Addendums.
+- Human-in-the-Loop Review: A side-by-side split view mapping exact OCR bounding boxes to AI rationales for manual overrides.
+- Live Annotations: Generates a dynamically annotated PDF with ticks and marks for every graded script.
+- Analytics & Exports: Dashboard graphs, Immutable Audit Logs, PDF Gradesheets, and LMS-compatible CSV exports.
+- Real-time Notifications: Server-Sent Events (SSE) deliver live updates to the frontend during long-running background tasks.
+
+3. Technology Stack
+-------------------
+### Backend (Python)
+- FastAPI: High-performance web framework forREST APIs and SSE.
+- SQLAlchemy & asyncpg: Async ORM for database interactions and state management.
+- PyMuPDF: Powerful PDF rendering library used to draw physical red/green annotations on student uploads.
+- LLM SDKs: `google-generativeai` and `anthropic` for grading and rubric generation.
+
+### Frontend (JavaScript/React)
+- React 18 & Vite: Core library and blazing-fast build tool.
+- React Router DOM: Client-side routing for the dashboard architecture.
+- Recharts: For visual analytics and class performance graphs.
+- Vanilla CSS: Advanced glassmorphism, flex layouts, and custom theming.
+
+4. Backend File Structure
+-------------------------
+The backend utilizes a domain-driven structure under `backend/app/`:
+* `main.py`: The entry point, setting up FastAPI, CORS, Database Lifespan, and mounting all domain routers.
+* `events.py`: Handles SSE (Server-Sent Events) for live notifications to connected clients.
+* `database/`: Contains `models.py` (SQLAlchemy schema) and `session.py` (DB connection).
+* `auth/`: Dependencies for authenticating roles (e.g., `RequireRole`).
+* `hierarchy/`: Routes handling creation of Departments, Courses, Offerings, etc.
+* `ingestion/`: Routes for single and bulk file uploads, triggering OCR backgrounds, and CSV validation.
+* `segmentation/`: Logic to break down raw OCR text into identifiable question blocks.
+* `rubric/`: Generates draft rubrics via LLM, handles locking, addendums, and cross-offering cloning.
+* `grading/`: The core Dual-Pass engine dispatching grading jobs concurrently to Claude and Gemini.
+* `review/`: Endpoints for human evaluators to accept or override the AI scores.
+* `annotation/`: PDF manipulation logic to physically stamp the grades onto the scripts.
+* `analytics/`: Dashboards, Audit Logs, PDF Gradesheets, and LMS CSV exports.
+
+5. Frontend File Structure
+--------------------------
+The frontend lives under `frontend/src/` with key UI logic in `pages/`:
+* `App.jsx` & `components/Layout.jsx`: The application shell containing the Sidebar, routing outlet, and live Toast notifications.
+* `pages/Dashboard.jsx`: The main hub showing the roster, uploading materials, and tracking script statuses.
+* `pages/RubricsPage.jsx`: A transparency interface to edit, approve, or add addendums to the AI-generated marking schema.
+* `pages/ReviewPage.jsx`: The side-by-side human review tool embedding the PDF against the AI's grading rationales.
+* `pages/ReviewQueue.jsx`: A continuous workflow page for faculty to burn through flagged scripts.
+* `pages/AnalyticsDashboard.jsx`: Recharts-driven graphs showing class averages, pass rates, and grade distributions.
+* `pages/StudentView.jsx`: A restricted, read-only portal for students to see their finalized marks and annotated PDFs.
+* `pages/AuditLogViewer.jsx`: A system log tracking immutable actions (overrides, publishes, locks).
+* `api.js`: A centralized utility defining all backend `fetch` calls.

@@ -12,7 +12,7 @@ input for the next:
 | 1. Ingestion | `backend/app/ocr/preprocess.py` | Normalizes PDFs/images to 300-DPI page images; originals stored untouched |
 | 2. OCR | `backend/app/ocr/` | Handwriting OCR with word/line bounding boxes + confidence (Azure Document Intelligence, Google Vision, or mock) |
 | 3. Segmentation & matching | `backend/app/segmentation/` | Detects question boundaries (incl. "Q2 continued"), matches segments to questions semantically, flags unattributable segments for review |
-| 4. Rubric evaluation | `backend/app/grading/` | **Dual-model dual-pass**: Gemini grades first (primary), Grok grades independently (cross-check); every mark must cite evidence lines; confidence gating; calibration examples |
+| 4. Rubric evaluation | `backend/app/grading/` | **Dual-model dual-pass**: Claude grades first (primary), Gemini grades independently (cross-check); every mark must cite evidence lines; confidence gating; calibration examples |
 | 5. Annotation & report | `backend/app/annotation/`, `backend/app/reports/` | PyMuPDF coordinate overlay: green ticks, red crosses/underlines, circled marks badges, running total; JSON summary report |
 | 6. Human review | `backend/app/api/routes.py`, `frontend/` | Side-by-side annotated PDF + AI reasoning; accept/override per question; marks final only after review |
 
@@ -22,8 +22,8 @@ Stage 4 uses **two completely independent LLMs** to eliminate single-model bias:
 
 | Pass | Model | Role |
 |---|---|---|
-| Pass 1 (primary) | **Google Gemini** (`GEMINI_MODEL`) | Produces the authoritative grading result |
-| Pass 2 (cross-check) | **xAI Grok** (`GROK_MODEL`) | Independent second opinion; result stored alongside pass 1 |
+| Pass 1 (primary) | **Claude 3.5 Sonnet** (`ANTHROPIC_MODEL`) | Produces the authoritative grading result |
+| Pass 2 (cross-check) | **Google Gemini** (`GEMINI_MODEL`) | Independent second opinion; result stored alongside pass 1 |
 
 When the two models disagree by more than `DISAGREEMENT_THRESHOLD` (default 15 % of total marks),
 the question is automatically flagged for human review. Neither model's result is silently
@@ -39,7 +39,7 @@ preferred or averaged — the flag makes the discrepancy transparent.
 - Unmatched answer segments become zero-mark flagged records — never silently graded or dropped.
 - Full audit trail: OCR segments, both evaluation passes, evidence, flags, and human overrides stored as separate records.
 
-## Backend (FastAPI + PyMuPDF + Gemini + Grok)
+## Backend (FastAPI + PyMuPDF + Claude + Gemini)
 
 ```bash
 cd backend
@@ -80,8 +80,8 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values below.
 
 | Variable | Where to get it | Default model |
 |---|---|---|
-| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) | `gemini-2.5-pro` |
-| `GROK_API_KEY` | [xAI Console](https://console.x.ai/) | `grok-3-mini` |
+| `ANTHROPIC_API_KEY` | [Anthropic Console](https://console.anthropic.com/) | `claude-3-5-sonnet-20241022` |
+| `GOOGLE_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) | `gemini-1.5-pro` |
 
 > **OCR** — `OCR_PROVIDER=mock` runs the whole pipeline offline; set `azure` or `google`
 > plus credentials for real handwriting OCR.
@@ -99,13 +99,13 @@ AZURE_DOCINT_ENDPOINT=
 AZURE_DOCINT_KEY=
 GOOGLE_APPLICATION_CREDENTIALS=
 
-# Stage 4 — Pass 1 (primary): Google Gemini
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-pro
+# Stage 4 — Pass 1 (primary): Claude 3.5 Sonnet
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
 
-# Stage 4 — Pass 2 (cross-check): xAI Grok
-GROK_API_KEY=your_grok_api_key_here
-GROK_MODEL=grok-3-mini
+# Stage 4 — Pass 2 (cross-check): Google Gemini
+GOOGLE_API_KEY=your_google_api_key_here
+GEMINI_MODEL=gemini-1.5-pro
 
 # Shared grading parameters
 GRADING_TEMPERATURE=0.0

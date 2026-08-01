@@ -11,6 +11,7 @@ export default function NewEvaluation() {
   const [studentName, setStudentName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
   
   const qpRef = useRef()
   const akRef = useRef()
@@ -44,7 +45,7 @@ export default function NewEvaluation() {
     setError('')
     try {
       await uploadScript(file, studentName, examId || 'default')
-      navigate('/dashboard')
+      setSuccessMsg('Test script uploaded successfully! Check backend logs for the model outputs.')
     } catch (err) {
       setError(String(err))
     } finally {
@@ -54,6 +55,19 @@ export default function NewEvaluation() {
 
   const triggerInput = (ref) => ref.current?.click()
 
+  const resetSandbox = () => {
+    setStep(1);
+    setQuestionPaper(null);
+    setAnswerKey(null);
+    setExamId('');
+    setRubrics([]);
+    setStudentName('');
+    setSuccessMsg('');
+    if (qpRef.current) qpRef.current.value = '';
+    if (akRef.current) akRef.current.value = '';
+    if (scriptRef.current) scriptRef.current.value = '';
+  }
+
   return (
     <div className="new-eval-container">
       <div className="wizard-progress">
@@ -62,12 +76,16 @@ export default function NewEvaluation() {
         <div className={`wizard-step ${step === 3 ? 'active' : ''}`}>3. Student Scripts</div>
       </div>
 
-      {error && <div className="flag" style={{marginBottom: 24}}>{error}</div>}
+      {error && <div className="flag" style={{marginBottom: 24, background: '#ef4444', color: 'white', padding: '12px', borderRadius: '8px'}}>{error}</div>}
+      {successMsg && <div className="flag" style={{marginBottom: 24, background: '#10b981', color: 'white', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+        <span>{successMsg}</span>
+        <button className="secondary" onClick={resetSandbox} style={{ border: '1px solid white', color: 'white' }}>Start Over</button>
+      </div>}
 
-      {step === 1 && (
+      {step === 1 && !successMsg && (
         <div className="card">
-          <h2>Upload Question Paper</h2>
-          <p style={{color: 'var(--text-muted)'}}>Upload the question paper (PDF or Image) to begin the evaluation setup.</p>
+          <h2>Model Testing Sandbox</h2>
+          <p style={{color: 'var(--text-muted)'}}>Upload a sample question paper (PDF or Image) to test the rubric generation models.</p>
           <div className="dropzone" onClick={() => triggerInput(qpRef)}>
             <input type="file" ref={qpRef} accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" onChange={(e) => {
               if (e.target.files[0]) {
@@ -86,10 +104,10 @@ export default function NewEvaluation() {
         </div>
       )}
 
-      {step === 2 && (
+      {step === 2 && !successMsg && (
         <div className="card">
           <h2>Upload Answer Key</h2>
-          <p style={{color: 'var(--text-muted)'}}>Provide the model answer key. The AI will cross-reference this with the question paper to build a structured rubric.</p>
+          <p style={{color: 'var(--text-muted)'}}>Provide the model answer key. The AI will cross-reference this with the question paper to test rubric structuring.</p>
           <div className="dropzone" onClick={() => triggerInput(akRef)}>
             <input type="file" ref={akRef} accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" onChange={(e) => setAnswerKey(e.target.files[0])} />
             <h3>{answerKey ? answerKey.name : 'Click to select Answer Key'}</h3>
@@ -114,7 +132,7 @@ export default function NewEvaluation() {
         </div>
       )}
 
-      {step === 3 && (
+      {step === 3 && !successMsg && (
         <>
           <div className="card" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
             <div>
@@ -126,7 +144,7 @@ export default function NewEvaluation() {
           </div>
 
           <div className="card">
-            <h2>Upload Student Script</h2>
+            <h2>Upload Test Script</h2>
             <form onSubmit={onUploadScript} className="actions">
               <input type="file" ref={scriptRef} accept=".pdf,.png,.jpg,.jpeg" required style={{flex: 1}} />
               <input type="text" placeholder="Student name (optional)" value={studentName} onChange={(e) => setStudentName(e.target.value)} />
